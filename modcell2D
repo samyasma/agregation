@@ -1,0 +1,155 @@
+import math
+import numpy
+import random
+import pygame
+            
+class Disque: #spheres se deplacent sur un plan donc assimilees a des disques
+    def __init__(self,x,y,vx,vy):#contient coordonnees du centre, vitesse et acceleration
+        self.x = x
+        self.y = y
+        self.vx  = vx
+        self.vy = vy
+        self.ax = 0.0
+        self.ay = 0.0
+            
+class Cellule:#liste de disques, chaque disque associe a un indice
+    def __init__(self):
+        self.ensemble_disques = set()
+        self.decal_x = 0.0
+        self.decal_y = 0.0
+    def ajouter(self,indice):
+        self.ensemble_disques.add(indice)
+    def enlever(self,indice):
+        self.ensemble_disques.remove(indice)
+             
+class Grille:#tableau 2D de cellules 
+    def __init__(self,Nbc,L):
+        self.L = L#L: largeur de la grille 
+        self.Nbc = Nbc#Nbc: Nombre de cellule
+        self.tableau = []
+        for i in range(self.Nbc):
+            ligne = []
+            for j in range(self.Nbc):
+                ligne.append(Cellule())
+            self.tableau.append(ligne)
+    def obtenir_cellule(self,i,j):#cette fonction renvoit la cellule comprise dans les bornes de la grille
+            decal_x = 0.0
+            decal_y = 0.0
+            if i<0:
+                i += self.Nbc
+                decal_x = -self.L
+            elif i>=self.Nbc:
+                i -= self.Nbc
+                decal_x = self.L
+            if j<0:
+                j += self.Nbc
+                decal_y = -self.L
+            elif j>=self.Nbc:
+                j -= self.Nbc
+                decal_y = self.L
+            cellule = self.tableau[i][j]
+            cellule.decal_x = decal_x
+            cellule.decal_y = decal_y
+            return cellule
+             
+class Calcul:
+    def __init__(self,NbD,densite):
+        self.NbD = NbD#Nombre de cellule par dimmension
+        self.N = NbD*NbD
+        self.rayon = 0.5
+        self.diam = self.rayon*2
+        self.diam2 = self.diam**2
+        self.L = math.sqrt(math.pi/densite)*0.5*NbD
+        self.aire = self.L*self.L
+        self.demi_L = self.L*0.5
+        self.Nbc = int(self.L/self.diam)
+        self.lc = self.L/self.Nbc#longueur d'une cellule
+        self.grille = Grille(self.Nbc,self.L)
+        self.liste_disques = []
+        for d in range(self.N):
+            self.liste_disques.append(Disque(0,0,0,0))
+       
+            
+    def init_disque(self,indice,x,y,vx,vy):#initialiser une cellule dont lindice est donne
+        disque = self.liste_disques[indice]
+        disque.x = x
+        disque.y = y
+        disque.vx = vx
+        disque.vy = vy
+        i = int(x/self.lc)
+        j = int(y/self.lc)
+        cellule = self.grille.obtenir_cellule(i,j)
+        cellule.ajouter(indice)
+
+            
+    def initialiser(self,vitesse):#Pour initialiser le systeme, on place les spheres regulierement espacees avec une vitesse de direction aleatoire, dont la norme est donnee
+        dx = self.L*1.0/(self.NbD)
+        print("distance initiale = %f"%dx)
+        if dx < self.diam:
+            raise Exception("densite trop forte")
+        else:
+            dy = dx
+            x = dx/2
+            y = x
+            px = 0.0
+            py = 0.0
+            for k in range(self.N):
+                a = random.random()*math.pi*2.0
+                vx = vitesse*math.cos(a)
+                vy = vitesse*math.sin(a)
+                px += vx
+                py += vy
+                self.init_disque(k,x,y,vx,vy)
+                x += dx
+                if x > self.L:
+                    x = dx/2
+                    y += dy
+            for k in range(self.N):
+                disque = self.liste_disques[k]
+                disque.vx -= px/self.N
+                disque.vy -= py/self.N 
+      
+           
+    def deplacer_disque(self,disque,indice,x1,y1):#La fonction suivante deplace un disque a une position donnee. Si le disque change de cellule, les deux cellules concernees sont mises a jour
+        if x1<0:
+            x1 %= self.L
+        elif x1>=self.L:
+            x1 %= self.L
+        if y1<0:
+            y1 %= self.L
+        elif y1>=self.L:
+            y1 %= self.L
+        i = int(disque.x/self.lc)
+        j = int(disque.y/self.lc)
+        i1 = int(x1/self.lc)
+        j1 = int(y1/self.lc)
+        if i!=i1 or j!=j1:
+            cellule = self.grille.obtenir_cellule(i,j)
+            cellule.enlever(indice)
+            cellule1 = self.grille.obtenir_cellule(i1,j1)
+            cellule1.ajouter(indice)
+        disque.x = x1
+        disque.y = y1
+
+             
+    def euler(self,h,hd2):
+        for k in range(self.N):
+            disque = self.liste_disques[k]
+            self.deplacer_disque(disque,k,disque.x+h*disque.vx,disque.y+h*disque.vy)
+            disque.vx += h*disque.ax
+            disque.vy += h*disque.ay
+        self.calculer_forces()
+
+                
+    def integration(self,methode,h,n):#plusieurs pas d'integration
+        hd2 = h/2
+        for i in range(n):
+            methode(h,hd2)
+             
+    def dessiner_disques(self,screen,echelle,couleur):#dessin des disques avec pygame
+        for k in range(self.N):
+            disque = self.liste_disques[k]
+            pygame.draw.ellipse(screen,couleur,[(disque.x-self.rayon)*echelle,(disque.y-self.rayon)*echelle,self.rayon*2*echelle,self.rayon*2*echelle],2)
+            
+  
+             
